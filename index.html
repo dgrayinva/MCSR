@@ -73,9 +73,7 @@
     <button id="resetBtn" class="secondary">Reset Defaults</button>
   </div>
   <div class="player-wrapper">
-    <iframe id="sc-widget" allow="autoplay"
-      src="https://soundcloud.com">
-    </iframe>
+    <iframe id="sc-widget" allow="autoplay" src="https://soundcloud.com"></iframe>
   </div>
   <div class="section-title">Active Radio Rotation (Uncheck to Mute)</div>
   <div class="show-list" id="showList"></div>
@@ -105,6 +103,10 @@
   const widget = SC.Widget(document.getElementById("sc-widget"));
   const statusEl = document.getElementById("nowPlaying");
   const listEl = document.getElementById("showList");
+
+  function cleanScUrl(rawUrl) {
+    return rawUrl.trim().split("?")[0].replace(/\/+$/, "");
+  }
 
   function formatTime(ms) {
     const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -172,12 +174,13 @@
   function loadShow(index, autoPlay = true, resumeData = null) {
     currentShowIndex = index;
     const show = shows[index];
+    const cleanUrl = cleanScUrl(show.url);
     renderList();
     statusEl.textContent = resumeData
       ? `Restoring: ${show.name} (${formatTime(resumeData.positionMs)})...`
       : `Loading: ${show.name}...`;
 
-    widget.load(show.url, {
+    widget.load(cleanUrl, {
       auto_play: autoPlay, hide_related: true, show_comments: false,
       show_user: true, show_reposts: false, show_teaser: false, color: "#ff5500",
       callback: () => {
