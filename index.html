@@ -151,7 +151,7 @@
         ? (hasPinned ? "IN PROGRESS — PINNED EPISODE SAVED" : "IN PROGRESS — PICK UP WHERE YOU LEFT OFF")
         : "UP NEXT IN ROTATION";
       const sub = activeShow.lastNote
-        ? `Last heard: ${activeShow.lastNote}`
+        ? `Previously heard: ${activeShow.lastNote}`
         : (hasPinned ? "Locked to your exact episode link until you mark Finished." : "Opens directly to the show's radio playlist or newest tracks.");
       const btnText = hasPinned
         ? "▶ Resume Exact Episode"
@@ -168,7 +168,7 @@
         </div>
         <div style="display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border); padding-top:12px;">
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <input type="text" id="noteInput" value="${activeShow.lastNote || ""}" placeholder="Episode note (e.g., Ep 443 or Nov 13) — saved when you click Finished" style="font-size:0.82rem; padding:8px 10px;">
+            <input type="text" id="noteInput" value="" placeholder="Add episode # or date (e.g., Ep 443) — appends to Heard list on Finished" style="font-size:0.82rem; padding:8px 10px;">
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <input type="text" id="pinInput" value="${state.pinnedEpisodeUrl || ""}" placeholder="Optional: Paste exact episode Share link here to pin it" style="font-size:0.82rem; padding:8px 10px;">
@@ -185,7 +185,10 @@
       document.getElementById("finishBtn").onclick = () => {
         const noteVal = document.getElementById("noteInput").value.trim();
         const showIdx = shows.findIndex(s => s.id === activeShow.id);
-        if (showIdx !== -1 && noteVal) shows[showIdx].lastNote = noteVal;
+        if (showIdx !== -1 && noteVal) {
+          const prev = shows[showIdx].lastNote || "";
+          shows[showIdx].lastNote = prev ? `${prev}, ${noteVal}` : noteVal;
+        }
 
         if (!state.cycleCompletedIds.includes(activeShow.id)) state.cycleCompletedIds.push(activeShow.id);
         if (!state.everHeardIds.includes(activeShow.id)) state.everHeardIds.push(activeShow.id);
@@ -238,6 +241,7 @@
         const subNote = document.createElement("div");
         subNote.style.fontSize = "0.78rem";
         subNote.style.color = "var(--muted)";
+        subNote.style.wordBreak = "break-word";
         subNote.textContent = `Heard: ${show.lastNote}`;
         textWrap.appendChild(subNote);
       }
