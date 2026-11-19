@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom House Radio Recycler</title>
+  <style>
+    :root {
+      --bg: #111113; --surface: #1c1c21; --accent: #ff5500;
+      --accent-hover: #e04b00; --text: #f4f4f6; --muted: #9a9aa6; --border: #2c2c35;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg); color: var(--text);
+      margin: 0; padding: 20px; display: flex; justify-content: center;
+    }
+    .container { width: 100%; max-width: 720px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    h1 { font-size: 1.3rem; margin: 0; letter-spacing: -0.02em; }
+    .status-badge {
+      font-size: 0.85rem; color: var(--muted); background: var(--surface);
+      padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border);
+    }
+    .controls { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    button {
+      background: var(--accent); color: white; border: none; padding: 10px 16px;
+      border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.95rem;
+    }
+    button:hover { background: var(--accent-hover); }
+    button.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    button.secondary:hover { background: #26262d; }
+    .player-wrapper {
+      background: var(--surface); border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--border); margin-bottom: 24px;
+    }
+    iframe { display: block; width: 100%; height: 320px; border: none; }
+    .section-title {
+      font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .show-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+    .show-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--surface); padding: 12px 14px; border-radius: 8px;
+      border: 1px solid var(--border); gap: 10px;
+    }
+    .show-item.active { border-color: var(--accent); }
+    .show-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+    .show-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .show-actions { display: flex; gap: 6px; }
+    .btn-small { padding: 5px 10px; font-size: 0.8rem; }
+    .add-form { display: flex; gap: 8px; flex-wrap: wrap; }
+    input[type="text"] {
+      flex: 1; min-width: 180px; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 0.9rem;
+    }
+    input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; cursor: pointer; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>House Radio Recycler</h1>
+    <div class="status-badge" id="nowPlaying">Ready</div>
+  </header>
+  <div class="controls">
+    <button id="startBtn">▶ Play / Next Show</button>
+    <button id="skipEpBtn" class="secondary">↻ Different Episode</button>
+    <button id="resetBtn" class="secondary">Reset Defaults</button>
+  </div>
+  <div class="player-wrapper">
+    <iframe id="sc-widget" allow="autoplay"
+      src="https://soundcloud.com">
+    </iframe>
+  </div>
+  <div class="section-title">Active Radio Rotation (Uncheck to Mute)</div>
+  <div class="show-list" id="showList"></div>
+  <div class="section-title">Add Another Show or Playlist URL</div>
+  <div class="add-form">
+    <input type="text" id="newName" placeholder="Show Name (e.g., Glitterbox Radio)">
+    <input type="text" id="newUrl" placeholder="SoundCloud Profile or Playlist URL">
+    <button id="addBtn">Add</button>
+  </div>
+</div>
+<script src="https://soundcloud.com"></script>
+<script>
+  const DEFAULT_SHOWS = [
+    { name: "Black Legend — The Legendary Radio Show", url: "https://soundcloud.com", enabled: true },
+    { name: "Defected Records — Defected Radio Show", url: "https://soundcloud.com", enabled: true },
+    { name: "Motive Records — Motive Radio Show", url: "https://soundcloud.com", enabled: true },
+    { name: "Ricardo Torres — The NDYD Radio Show", url: "https://soundcloud.com", enabled: true },
+    { name: "Wh0 Plays Sessions", url: "https://soundcloud.com", enabled: true },
+    { name: "HouseBound Radio Show", url: "https://soundcloud.com", enabled: true }
+  ];
+
+  let shows = JSON.parse(localStorage.getItem("custom_sc_shows")) || DEFAULT_SHOWS;
+  let playedTrackIds = JSON.parse(localStorage.getItem("played_sc_tracks")) || [];
+  let savedSession = JSON.parse(localStorage.getItem("sc_resume_state")) || null;
+  let currentShowIndex = -1, currentTrackId = null, pendingSeekMs = 0, isResuming = false;
+
+  const widget = SC.Widget(document.getElementById("sc-widget"));
+  const statusEl = document.getElementById("nowPlaying");
+  const listEl = document.getElementById("showList");
+
+  function formatTime(ms) {
+    const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    const p = (n) => String(n).padStart(2, "0");
+    return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${m}:${p(sec)}`;
+  }
+
+  function saveShows() { localStorage.setItem("custom_sc_shows", JSON.stringify(shows)); }
+
+  function saveProgress(posMs) {
+    if (currentShowIndex === -1 || !currentTrackId || posMs < 3000) return;
+    const show = shows[currentShowIndex];
+    if (!show) return;
+    savedSession = { showUrl: show.url, trackId: currentTrackId, positionMs: posMs };
+    localStorage.setItem("sc_resume_state", JSON.stringify(savedSession));
+  }
+
+  function clearProgress() {
+    savedSession = null; pendingSeekMs = 0;
+    localStorage.removeItem("sc_resume_state");
+  }
+
+  function renderList() {
+    listEl.innerHTML = "";
+    shows.forEach((show, idx) => {
+      const item = document.createElement("div");
+      item.className = "show-item" + (idx === currentShowIndex ? " active" : "");
+      const info = document.createElement("div");
+      info.className = "show-info";
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = show.enabled;
+      cb.onchange = () => { shows[idx].enabled = cb.checked; saveShows(); };
+
+      const lbl = document.createElement("span");
+      lbl.className = "show-name"; lbl.textContent = show.name;
+      info.append(cb, lbl);
+
+      const actions = document.createElement("div");
+      actions.className = "show-actions";
+
+      const playBtn = document.createElement("button");
+      playBtn.className = "secondary btn-small"; playBtn.textContent = "Play";
+      playBtn.onclick = () => { clearProgress(); loadShow(idx, true); };
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "secondary btn-small"; delBtn.textContent = "✕";
+      delBtn.onclick = () => { shows.splice(idx, 1); saveShows(); renderList(); };
+
+      actions.append(playBtn, delBtn);
+      item.append(info, actions);
+      listEl.appendChild(item);
+    });
+  }
+
+  function pickNextShow() {
+    clearProgress();
+    const enabled = shows.map((s, i) => (s.enabled ? i : -1)).filter(i => i !== -1);
+    if (!enabled.length) { statusEl.textContent = "Enable at least one show!"; return; }
+    let pool = enabled.filter(i => i !== currentShowIndex);
+    if (!pool.length) pool = enabled;
+    loadShow(pool[Math.floor(Math.random() * pool.length)], true);
+  }
+
+  function loadShow(index, autoPlay = true, resumeData = null) {
+    currentShowIndex = index;
+    const show = shows[index];
+    renderList();
+    statusEl.textContent = resumeData
+      ? `Restoring: ${show.name} (${formatTime(resumeData.positionMs)})...`
+      : `Loading: ${show.name}...`;
+
+    widget.load(show.url, {
+      auto_play: autoPlay, hide_related: true, show_comments: false,
+      show_user: true, show_reposts: false, show_teaser: false, color: "#ff5500",
+      callback: () => {
+        widget.getSounds((sounds) => {
+          if (!sounds || !sounds.length) { if (autoPlay) widget.play(); return; }
+          let epIdx = resumeData?.trackId ? sounds.findIndex(s => s?.id === resumeData.trackId) : -1;
+
+          if (epIdx === -1) {
+            resumeData = null;
+            const limit = Math.min(sounds.length, 10);
+            let candidates = Array.from({ length: limit }, (_, i) => i).filter(i => !playedTrackIds.includes(sounds[i].id));
+            if (!candidates.length) candidates = Array.from({ length: limit }, (_, i) => i);
+            epIdx = candidates[Math.floor(Math.random() * candidates.length)];
+          }
+
+          currentTrackId = sounds[epIdx]?.id || null;
+          if (currentTrackId && !playedTrackIds.includes(currentTrackId)) {
+            playedTrackIds.push(currentTrackId);
+            if (playedTrackIds.length > 60) playedTrackIds.shift();
+            localStorage.setItem("played_sc_tracks", JSON.stringify(playedTrackIds));
+          }
+
+          widget.skip(epIdx);
+          if (resumeData && resumeData.positionMs > 0) {
+            pendingSeekMs = resumeData.positionMs; isResuming = true;
+            statusEl.textContent = `Paused at ${formatTime(pendingSeekMs)} — ${show.name}`;
+            if (autoPlay) widget.play();
+          } else {
+            pendingSeekMs = 0; isResuming = false;
+            if (autoPlay) { widget.play(); statusEl.textContent = `Playing: ${show.name}`; }
+          }
+        });
+      }
+    });
+  }
+
+  widget.bind(SC.Widget.Events.PLAY, () => {
+    if (shows[currentShowIndex]) statusEl.textContent = `Playing: ${shows[currentShowIndex].name}`;
+    if (isResuming && pendingSeekMs > 0) {
+      const target = pendingSeekMs;
+      isResuming = false; pendingSeekMs = 0;
+      setTimeout(() => widget.seekTo(target), 400);
+    }
+  });
+
+  setInterval(() => {
+    widget.isPaused((paused) => { if (!paused && !isResuming) widget.getPosition(saveProgress); });
+  }, 3000);
+
+  widget.bind(SC.Widget.Events.FINISH, () => { clearProgress(); pickNextShow(); });
+
+  document.getElementById("startBtn").onclick = () => {
+    if (currentShowIndex !== -1 && pendingSeekMs > 0) widget.play();
+    else pickNextShow();
+  };
+
+  document.getElementById("skipEpBtn").onclick = () => {
+    clearProgress();
+    currentShowIndex === -1 ? pickNextShow() : loadShow(currentShowIndex, true);
+  };
+
+  document.getElementById("addBtn").onclick = () => {
+    const name = document.getElementById("newName").value.trim();
+    const url = document.getElementById("newUrl").value.trim();
+    if (!name || !url) return;
+    shows.push({ name, url, enabled: true });
+    saveShows(); renderList();
+    document.getElementById("newName").value = "";
+    document.getElementById("newUrl").value = "";
+  };
+
+  document.getElementById("resetBtn").onclick = () => {
+    clearProgress();
+    shows = JSON.parse(JSON.stringify(DEFAULT_SHOWS));
+    saveShows(); renderList();
+  };
+
+  renderList();
+  widget.bind(SC.Widget.Events.READY, () => {
+    if (savedSession?.showUrl) {
+      const idx = shows.findIndex(s => s.url === savedSession.showUrl);
+      if (idx !== -1) loadShow(idx, false, savedSession);
+    }
+  });
+</script>
+</body>
+</html>
