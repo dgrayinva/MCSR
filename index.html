@@ -1,8 +1,300 @@
 <!DOCTYPE html>
-<html>
-<body style="background:#111;padding:20px;">
-  <iframe width="100%" height="320" scrolling="no" frameborder="no" allow="autoplay"
-    src="https://soundcloud.com">
-  </iframe>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>House Radio Recycler</title>
+  <style>
+    :root {
+      --bg: #111113; --surface: #1c1c21; --surface-hi: #24242b;
+      --accent: #ff5500; --accent-hover: #e04b00; --green: #22c55e;
+      --text: #f4f4f6; --muted: #9a9aa6; --border: #2c2c35;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg); color: var(--text);
+      margin: 0; padding: 20px; display: flex; justify-content: center;
+    }
+    .container { width: 100%; max-width: 680px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 18px; flex-wrap: wrap; gap: 10px;
+    }
+    h1 { font-size: 1.35rem; margin: 0; letter-spacing: -0.02em; }
+    .badge {
+      font-size: 0.8rem; color: var(--muted); background: var(--surface);
+      padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border);
+    }
+    .spotlight {
+      background: var(--surface); border: 1px solid var(--accent);
+      border-radius: 14px; padding: 20px; margin-bottom: 24px;
+    }
+    .spotlight-tag {
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--accent); margin-bottom: 6px;
+    }
+    .spotlight-title { font-size: 1.3rem; font-weight: 700; margin: 0 0 6px 0; }
+    .spotlight-sub { font-size: 0.88rem; color: var(--muted); margin: 0 0 16px 0; }
+    .spotlight-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    button, a.btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: var(--accent); color: white; border: none; padding: 12px 18px;
+      border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 0.95rem;
+      text-decoration: none; transition: background 0.15s;
+    }
+    button:hover, a.btn:hover { background: var(--accent-hover); }
+    button.done { background: #15803d; }
+    button.done:hover { background: #166534; }
+    button.secondary {
+      background: var(--surface-hi); color: var(--text); border: 1px solid var(--border);
+    }
+    button.secondary:hover { background: #2e2e37; }
+    .section-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    }
+    .show-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+    .show-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--surface); padding: 12px 14px; border-radius: 10px;
+      border: 1px solid var(--border); gap: 10px;
+    }
+    .show-item.active { border-color: var(--accent); background: #221b18; }
+    .show-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+    .show-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .show-actions { display: flex; gap: 6px; }
+    .btn-small { padding: 6px 11px; font-size: 0.82rem; border-radius: 7px; }
+    .add-form { display: flex; gap: 8px; flex-wrap: wrap; }
+    input[type="text"] {
+      flex: 1; min-width: 180px; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 11px 12px; border-radius: 8px; font-size: 0.9rem;
+    }
+    input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; cursor: pointer; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>House Radio Recycler</h1>
+    <div class="badge" id="cycleStatus">0 / 6 heard this cycle</div>
+  </header>
+
+  <div class="spotlight" id="spotlightCard">
+    <div class="spotlight-tag" id="spotTag">UP NEXT</div>
+    <h2 class="spotlight-title" id="spotTitle">Loading...</h2>
+    <p class="spotlight-sub" id="spotSub">Opens directly in the SoundCloud app on mobile or a new tab on desktop.</p>
+    <div class="spotlight-actions">
+      <a class="btn" id="launchBtn" href="#" target="_blank" rel="noopener">▶ Open in SoundCloud</a>
+      <button class="done" id="finishBtn">✓ Finished — Next Show</button>
+      <button class="secondary" id="rerollBtn">↻ Skip / Reroll</button>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title">Your Radio Pool (Uncheck to Mute)</div>
+    <button class="secondary btn-small" id="resetBtn">Reset Defaults</button>
+  </div>
+  <div class="show-list" id="showList"></div>
+
+  <div class="section-title" style="margin-bottom: 10px;">Add Another Show URL</div>
+  <div class="add-form">
+    <input type="text" id="newName" placeholder="Show Name (e.g., Glitterbox Radio)">
+    <input type="text" id="newUrl" placeholder="https://soundcloud.com...">
+    <button id="addBtn">Add</button>
+  </div>
+</div>
+<script>
+  const DEFAULT_SHOWS = [
+    { id: "blacklegend", name: "Black Legend — The Legendary Radio Show", url: "https://soundcloud.com", enabled: true },
+    { id: "defected", name: "Defected Records — Defected Radio Show", url: "https://soundcloud.com", enabled: true },
+    { id: "motive", name: "Motive Records — Motive Radio Show", url: "https://soundcloud.com", enabled: true },
+    { id: "ndyd", name: "Ricardo Torres — The NDYD Radio Show", url: "https://soundcloud.com", enabled: true },
+    { id: "wh0", name: "Wh0 Plays Sessions", url: "https://soundcloud.com", enabled: true },
+    { id: "housebound", name: "HouseBound Radio Show", url: "https://soundcloud.com", enabled: true }
+  ];
+
+  let shows = JSON.parse(localStorage.getItem("sc_recycler_shows")) || JSON.parse(JSON.stringify(DEFAULT_SHOWS));
+  let state = JSON.parse(localStorage.getItem("sc_recycler_state")) || {
+    activeShowId: null,
+    inProgress: false,
+    completedIds: []
+  };
+
+  function saveAll() {
+    localStorage.setItem("sc_recycler_shows", JSON.stringify(shows));
+    localStorage.setItem("sc_recycler_state", JSON.stringify(state));
+  }
+
+  function pickRandomShow(excludeId = null) {
+    const enabled = shows.filter(s => s.enabled);
+    if (enabled.length === 0) {
+      state.activeShowId = null;
+      state.inProgress = false;
+      saveAll();
+      render();
+      return;
+    }
+
+    // Filter out shows already finished in the current rotation cycle
+    let pool = enabled.filter(s => !state.completedIds.includes(s.id) && s.id !== excludeId);
+
+    // If every enabled show has been heard, start a fresh rotation cycle!
+    if (pool.length === 0) {
+      state.completedIds = [];
+      pool = enabled.filter(s => s.id !== excludeId);
+      if (pool.length === 0) pool = enabled;
+    }
+
+    const chosen = pool[Math.floor(Math.random() * pool.length)];
+    state.activeShowId = chosen.id;
+    state.inProgress = false;
+    saveAll();
+    render();
+  }
+
+  function render() {
+    const enabled = shows.filter(s => s.enabled);
+    const completedInPool = enabled.filter(s => state.completedIds.includes(s.id)).length;
+    document.getElementById("cycleStatus").textContent = `${completedInPool} / ${enabled.length} heard this cycle`;
+
+    let activeShow = shows.find(s => s.id === state.activeShowId && s.enabled);
+    if (!activeShow && enabled.length > 0) {
+      pickRandomShow();
+      return;
+    }
+
+    const spotTag = document.getElementById("spotTag");
+    const spotTitle = document.getElementById("spotTitle");
+    const spotSub = document.getElementById("spotSub");
+    const launchBtn = document.getElementById("launchBtn");
+
+    if (!activeShow) {
+      spotTag.textContent = "PAUSED";
+      spotTitle.textContent = "No shows enabled";
+      spotSub.textContent = "Check at least one show below to start your rotation.";
+      launchBtn.style.display = "none";
+    } else {
+      launchBtn.style.display = "inline-flex";
+      launchBtn.href = activeShow.url;
+      spotTitle.textContent = activeShow.name;
+
+      if (state.inProgress) {
+        spotTag.textContent = "IN PROGRESS — PICK UP WHERE YOU LEFT OFF";
+        spotSub.textContent = "Tap Open to continue this 1–2 hr show in SoundCloud, or mark Finished when done.";
+        launchBtn.textContent = "▶ Continue in SoundCloud";
+      } else {
+        spotTag.textContent = "UP NEXT IN ROTATION";
+        spotSub.textContent = "Opens directly in the SoundCloud app on mobile or a new tab on laptop.";
+        launchBtn.textContent = "▶ Open in SoundCloud";
+      }
+    }
+
+    const listEl = document.getElementById("showList");
+    listEl.innerHTML = "";
+
+    shows.forEach((show, idx) => {
+      const isCurrent = show.id === state.activeShowId;
+      const isDone = state.completedIds.includes(show.id);
+
+      const item = document.createElement("div");
+      item.className = "show-item" + (isCurrent ? " active" : "");
+
+      const info = document.createElement("div");
+      info.className = "show-info";
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = show.enabled;
+      cb.onchange = () => {
+        shows[idx].enabled = cb.checked;
+        saveAll();
+        if (!cb.checked && isCurrent) pickRandomShow(show.id);
+        else render();
+      };
+
+      const lbl = document.createElement("span");
+      lbl.className = "show-name";
+      lbl.textContent = (isDone ? "✓ " : "") + show.name;
+      if (isDone) lbl.style.color = "var(--muted)";
+
+      info.append(cb, lbl);
+
+      const actions = document.createElement("div");
+      actions.className = "show-actions";
+
+      const selectBtn = document.createElement("button");
+      selectBtn.className = "secondary btn-small";
+      selectBtn.textContent = "Select";
+      selectBtn.onclick = () => {
+        state.activeShowId = show.id;
+        state.inProgress = false;
+        saveAll();
+        render();
+      };
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "secondary btn-small";
+      delBtn.textContent = "✕";
+      delBtn.onclick = () => {
+        const removedId = show.id;
+        shows.splice(idx, 1);
+        saveAll();
+        if (removedId === state.activeShowId) pickRandomShow();
+        else render();
+      };
+
+      actions.append(selectBtn, delBtn);
+      item.append(info, actions);
+      listEl.appendChild(item);
+    });
+  }
+
+  // Mark show as "In Progress" as soon as you click Open in SoundCloud
+  document.getElementById("launchBtn").onclick = () => {
+    if (state.activeShowId) {
+      state.inProgress = true;
+      saveAll();
+      render();
+    }
+  };
+
+  // Mark current show finished and roll the next unplayed show
+  document.getElementById("finishBtn").onclick = () => {
+    if (state.activeShowId && !state.completedIds.includes(state.activeShowId)) {
+      state.completedIds.push(state.activeShowId);
+    }
+    pickRandomShow(state.activeShowId);
+  };
+
+  // Skip to a different show without marking the current one finished
+  document.getElementById("rerollBtn").onclick = () => {
+    pickRandomShow(state.activeShowId);
+  };
+
+  document.getElementById("addBtn").onclick = () => {
+    const name = document.getElementById("newName").value.trim();
+    const url = document.getElementById("newUrl").value.trim();
+    if (!name || !url) return;
+    shows.push({ id: "custom_" + Date.now(), name, url, enabled: true });
+    saveAll();
+    render();
+    document.getElementById("newName").value = "";
+    document.getElementById("newUrl").value = "";
+  };
+
+  document.getElementById("resetBtn").onclick = () => {
+    shows = JSON.parse(JSON.stringify(DEFAULT_SHOWS));
+    state = { activeShowId: null, inProgress: false, completedIds: [] };
+    saveAll();
+    pickRandomShow();
+  };
+
+  if (!state.activeShowId) pickRandomShow();
+  else render();
+</script>
 </body>
 </html>
