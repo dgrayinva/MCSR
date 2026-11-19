@@ -7,7 +7,7 @@
   <style>
     :root {
       --bg: #111113; --surface: #1c1c21; --surface-hi: #24242b;
-      --accent: #ff5500; --accent-hover: #e04b00; --green: #22c55e;
+      --accent: #ff5500; --accent-hover: #e04b00;
       --text: #f4f4f6; --muted: #9a9aa6; --border: #2c2c35;
     }
     * { box-sizing: border-box; }
@@ -41,22 +41,15 @@
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
       background: var(--accent); color: white; border: none; padding: 12px 18px;
       border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 0.95rem;
-      text-decoration: none; transition: background 0.15s;
+      text-decoration: none;
     }
     button:hover, a.btn:hover { background: var(--accent-hover); }
     button.done { background: #15803d; }
     button.done:hover { background: #166534; }
-    button.secondary {
-      background: var(--surface-hi); color: var(--text); border: 1px solid var(--border);
-    }
+    button.secondary { background: var(--surface-hi); color: var(--text); border: 1px solid var(--border); }
     button.secondary:hover { background: #2e2e37; }
-    .section-header {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 10px;
-    }
-    .section-title {
-      font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
-    }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .section-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
     .show-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
     .show-item {
       display: flex; align-items: center; justify-content: space-between;
@@ -82,220 +75,213 @@
     <h1>House Radio Recycler</h1>
     <div class="badge" id="cycleStatus">0 / 6 heard this cycle</div>
   </header>
-
-  <div class="spotlight" id="spotlightCard">
-    <div class="spotlight-tag" id="spotTag">UP NEXT</div>
-    <h2 class="spotlight-title" id="spotTitle">Loading...</h2>
-    <p class="spotlight-sub" id="spotSub">Opens directly in the SoundCloud app on mobile or a new tab on desktop.</p>
-    <div class="spotlight-actions">
-      <a class="btn" id="launchBtn" href="#" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">▶ Open in SoundCloud</a>
-
-      <button class="done" id="finishBtn">✓ Finished — Next Show</button>
-      <button class="secondary" id="rerollBtn">↻ Skip / Reroll</button>
-    </div>
-  </div>
-
+  <div class="spotlight" id="spotlightBox"></div>
   <div class="section-header">
     <div class="section-title">Your Radio Pool (Uncheck to Mute)</div>
     <button class="secondary btn-small" id="resetBtn">Reset Defaults</button>
   </div>
   <div class="show-list" id="showList"></div>
-
-  <div class="section-title" style="margin-bottom: 10px;">Add Another Show URL</div>
+  <div class="section-title" style="margin-bottom: 10px;">Add Another Show URL (Paste SoundCloud Share Link)</div>
   <div class="add-form">
-    <input type="text" id="newName" placeholder="Show Name (e.g., Glitterbox Radio)">
+    <input type="text" id="newName" placeholder="Show Name">
     <input type="text" id="newUrl" placeholder="https://soundcloud.com...">
     <button id="addBtn">Add</button>
   </div>
 </div>
 <script>
   const DEFAULT_SHOWS = [
-    { id: "blacklegend", name: "Black Legend — The Legendary Radio Show", url: "https://soundcloud.com", enabled: true },
-    { id: "defected", name: "Defected Records — Defected Radio Show", url: "https://soundcloud.com", enabled: true },
-    { id: "motive", name: "Motive Records — Motive Radio Show", url: "https://soundcloud.com", enabled: true },
-    { id: "ndyd", name: "Ricardo Torres — The NDYD Radio Show", url: "https://soundcloud.com", enabled: true },
-    { id: "wh0", name: "Wh0 Plays Sessions", url: "https://soundcloud.com", enabled: true },
-    { id: "housebound", name: "HouseBound Radio Show", url: "https://soundcloud.com", enabled: true }
+    { id: "blacklegend", name: "Black Legend — The Legendary Radio Show", slug: "blacklegendproject/tracks", enabled: true, lastNote: "" },
+    { id: "defected", name: "Defected Records — Defected Radio Show", slug: "defectedrecords/sets/defected-in-the-house-radio", enabled: true, lastNote: "" },
+    { id: "motive", name: "Motive Records — Motive Radio Show", slug: "motiverecordsau/sets/motive-radio", enabled: true, lastNote: "" },
+    { id: "ndyd", name: "Ricardo Torres — The NDYD Radio Show", slug: "ndyd-rs/tracks", enabled: true, lastNote: "" },
+    { id: "wh0", name: "Wh0 Plays Sessions", slug: "wh0playssessions/tracks", enabled: true, lastNote: "" },
+    { id: "housebound", name: "HouseBound Radio Show", slug: "wilson-frisk/tracks", enabled: true, lastNote: "" }
   ];
 
-  let shows = JSON.parse(localStorage.getItem("sc_recycler_shows")) || JSON.parse(JSON.stringify(DEFAULT_SHOWS));
-  let state = JSON.parse(localStorage.getItem("sc_recycler_state")) || {
-    activeShowId: null,
-    inProgress: false,
-    completedIds: []
+  function getShowUrl(show) {
+    if (state.pinnedEpisodeUrl) return state.pinnedEpisodeUrl;
+    if (show.url && show.url.length > 24) return show.url;
+    return ["https:", "", "soundcloud.com", show.slug].join("/");
+  }
+
+  let shows = JSON.parse(localStorage.getItem("sc_recycler_v5_shows")) || JSON.parse(JSON.stringify(DEFAULT_SHOWS));
+  let state = JSON.parse(localStorage.getItem("sc_recycler_v5_state")) || {
+    activeShowId: null, inProgress: false, cycleCompletedIds: [], everHeardIds: [], pinnedEpisodeUrl: ""
   };
 
   function saveAll() {
-    localStorage.setItem("sc_recycler_shows", JSON.stringify(shows));
-    localStorage.setItem("sc_recycler_state", JSON.stringify(state));
+    localStorage.setItem("sc_recycler_v5_shows", JSON.stringify(shows));
+    localStorage.setItem("sc_recycler_v5_state", JSON.stringify(state));
   }
 
   function pickRandomShow(excludeId = null) {
     const enabled = shows.filter(s => s.enabled);
-    if (enabled.length === 0) {
-      state.activeShowId = null;
-      state.inProgress = false;
-      saveAll();
-      render();
-      return;
+    if (!enabled.length) {
+      state.activeShowId = null; state.inProgress = false; state.pinnedEpisodeUrl = "";
+      saveAll(); render(); return;
     }
-
-    // Filter out shows already finished in the current rotation cycle
-    let pool = enabled.filter(s => !state.completedIds.includes(s.id) && s.id !== excludeId);
-
-    // If every enabled show has been heard, start a fresh rotation cycle!
-    if (pool.length === 0) {
-      state.completedIds = [];
+    let pool = enabled.filter(s => !state.cycleCompletedIds.includes(s.id) && s.id !== excludeId);
+    if (!pool.length) {
+      state.cycleCompletedIds = [];
       pool = enabled.filter(s => s.id !== excludeId);
-      if (pool.length === 0) pool = enabled;
+      if (!pool.length) pool = enabled;
     }
-
     const chosen = pool[Math.floor(Math.random() * pool.length)];
     state.activeShowId = chosen.id;
     state.inProgress = false;
-    saveAll();
-    render();
+    state.pinnedEpisodeUrl = "";
+    saveAll(); render();
   }
 
   function render() {
     const enabled = shows.filter(s => s.enabled);
-    const completedInPool = enabled.filter(s => state.completedIds.includes(s.id)).length;
-    document.getElementById("cycleStatus").textContent = `${completedInPool} / ${enabled.length} heard this cycle`;
+    const doneCount = enabled.filter(s => state.cycleCompletedIds.includes(s.id)).length;
+    document.getElementById("cycleStatus").textContent = `${doneCount} / ${enabled.length} heard this cycle`;
 
     let activeShow = shows.find(s => s.id === state.activeShowId && s.enabled);
-    if (!activeShow && enabled.length > 0) {
-      pickRandomShow();
-      return;
-    }
+    if (!activeShow && enabled.length) { pickRandomShow(); return; }
 
-    const spotTag = document.getElementById("spotTag");
-    const spotTitle = document.getElementById("spotTitle");
-    const spotSub = document.getElementById("spotSub");
-    const launchBtn = document.getElementById("launchBtn");
-
+    const spot = document.getElementById("spotlightBox");
     if (!activeShow) {
-      spotTag.textContent = "PAUSED";
-      spotTitle.textContent = "No shows enabled";
-      spotSub.textContent = "Check at least one show below to start your rotation.";
-      launchBtn.style.display = "none";
+      spot.innerHTML = `<div class="spotlight-tag">PAUSED</div><h2 class="spotlight-title">No shows enabled</h2><p class="spotlight-sub">Check at least one show below.</p>`;
     } else {
-      launchBtn.style.display = "inline-flex";
-      launchBtn.href = activeShow.url;
-      spotTitle.textContent = activeShow.name;
+      const targetUrl = getShowUrl(activeShow);
+      const hasPinned = Boolean(state.pinnedEpisodeUrl);
+      const tag = state.inProgress
+        ? (hasPinned ? "IN PROGRESS — PINNED EPISODE SAVED" : "IN PROGRESS — PICK UP WHERE YOU LEFT OFF")
+        : "UP NEXT IN ROTATION";
+      const sub = activeShow.lastNote
+        ? `Last heard: ${activeShow.lastNote}`
+        : (hasPinned ? "Locked to your exact episode link until you mark Finished." : "Opens directly to the show's radio playlist or newest tracks.");
+      const btnText = hasPinned
+        ? "▶ Resume Exact Episode"
+        : (state.inProgress ? "▶ Continue in SoundCloud" : "▶ Open Show Feed");
 
-      if (state.inProgress) {
-        spotTag.textContent = "IN PROGRESS — PICK UP WHERE YOU LEFT OFF";
-        spotSub.textContent = "Tap Open to continue this 1–2 hr show in SoundCloud, or mark Finished when done.";
-        launchBtn.textContent = "▶ Continue in SoundCloud";
-      } else {
-        spotTag.textContent = "UP NEXT IN ROTATION";
-        spotSub.textContent = "Opens directly in the SoundCloud app on mobile or a new tab on laptop.";
-        launchBtn.textContent = "▶ Open in SoundCloud";
+      spot.innerHTML = `
+        <div class="spotlight-tag">${tag}</div>
+        <h2 class="spotlight-title">${activeShow.name}</h2>
+        <p class="spotlight-sub">${sub}</p>
+        <div class="spotlight-actions" style="margin-bottom: 14px;">
+          <a class="btn" id="launchBtn" href="${targetUrl}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">${btnText}</a>
+          <button class="done" id="finishBtn">✓ Finished — Next Show</button>
+          <button class="secondary" id="rerollBtn">↻ Skip / Reroll</button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border); padding-top:12px;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="text" id="noteInput" value="${activeShow.lastNote || ""}" placeholder="Episode note (e.g., Ep 443 or Nov 13) — saved when you click Finished" style="font-size:0.82rem; padding:8px 10px;">
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <input type="text" id="pinInput" value="${state.pinnedEpisodeUrl || ""}" placeholder="Optional: Paste exact episode Share link here to pin it" style="font-size:0.82rem; padding:8px 10px;">
+            <button class="secondary btn-small" id="pinSaveBtn">${hasPinned ? "Update Link" : "Pin Episode"}</button>
+            ${hasPinned ? `<button class="secondary btn-small" id="pinClearBtn">Clear</button>` : ""}
+          </div>
+        </div>
+      `;
+
+      document.getElementById("launchBtn").onclick = () => {
+        state.inProgress = true; saveAll();
+        setTimeout(render, 200);
+      };
+      document.getElementById("finishBtn").onclick = () => {
+        const noteVal = document.getElementById("noteInput").value.trim();
+        const showIdx = shows.findIndex(s => s.id === activeShow.id);
+        if (showIdx !== -1 && noteVal) shows[showIdx].lastNote = noteVal;
+
+        if (!state.cycleCompletedIds.includes(activeShow.id)) state.cycleCompletedIds.push(activeShow.id);
+        if (!state.everHeardIds.includes(activeShow.id)) state.everHeardIds.push(activeShow.id);
+        pickRandomShow(activeShow.id);
+      };
+      document.getElementById("rerollBtn").onclick = () => pickRandomShow(activeShow.id);
+
+      document.getElementById("pinSaveBtn").onclick = () => {
+        const val = document.getElementById("pinInput").value.trim();
+        if (!val) return;
+        state.pinnedEpisodeUrl = val;
+        state.inProgress = true;
+        saveAll(); render();
+      };
+      if (hasPinned) {
+        document.getElementById("pinClearBtn").onclick = () => {
+          state.pinnedEpisodeUrl = "";
+          saveAll(); render();
+        };
       }
     }
 
     const listEl = document.getElementById("showList");
     listEl.innerHTML = "";
-
     shows.forEach((show, idx) => {
       const isCurrent = show.id === state.activeShowId;
-      const isDone = state.completedIds.includes(show.id);
-
+      const isEverDone = state.everHeardIds.includes(show.id);
       const item = document.createElement("div");
       item.className = "show-item" + (isCurrent ? " active" : "");
 
       const info = document.createElement("div");
       info.className = "show-info";
-
       const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = show.enabled;
+      cb.type = "checkbox"; cb.checked = show.enabled;
       cb.onchange = () => {
-        shows[idx].enabled = cb.checked;
-        saveAll();
-        if (!cb.checked && isCurrent) pickRandomShow(show.id);
-        else render();
+        shows[idx].enabled = cb.checked; saveAll();
+        if (!cb.checked && isCurrent) pickRandomShow(show.id); else render();
       };
 
-      const lbl = document.createElement("span");
-      lbl.className = "show-name";
-      lbl.textContent = (isDone ? "✓ " : "") + show.name;
-      if (isDone) lbl.style.color = "var(--muted)";
+      const textWrap = document.createElement("div");
+      textWrap.style.minWidth = "0";
+      textWrap.style.flex = "1";
 
-      info.append(cb, lbl);
+      const lbl = document.createElement("div");
+      lbl.className = "show-name";
+      lbl.innerHTML = (isEverDone ? `<span style="color:#22c55e;font-weight:700;">✓</span> ` : "") + show.name;
+      textWrap.appendChild(lbl);
+
+      if (show.lastNote) {
+        const subNote = document.createElement("div");
+        subNote.style.fontSize = "0.78rem";
+        subNote.style.color = "var(--muted)";
+        subNote.textContent = `Heard: ${show.lastNote}`;
+        textWrap.appendChild(subNote);
+      }
+
+      info.append(cb, textWrap);
 
       const actions = document.createElement("div");
       actions.className = "show-actions";
-
-      const selectBtn = document.createElement("button");
-      selectBtn.className = "secondary btn-small";
-      selectBtn.textContent = "Select";
-      selectBtn.onclick = () => {
-        state.activeShowId = show.id;
-        state.inProgress = false;
-        saveAll();
-        render();
+      const sel = document.createElement("button");
+      sel.className = "secondary btn-small"; sel.textContent = "Select";
+      sel.onclick = () => {
+        state.activeShowId = show.id; state.inProgress = false; state.pinnedEpisodeUrl = "";
+        saveAll(); render();
       };
-
-      const delBtn = document.createElement("button");
-      delBtn.className = "secondary btn-small";
-      delBtn.textContent = "✕";
-      delBtn.onclick = () => {
-        const removedId = show.id;
-        shows.splice(idx, 1);
-        saveAll();
-        if (removedId === state.activeShowId) pickRandomShow();
-        else render();
+      const del = document.createElement("button");
+      del.className = "secondary btn-small"; del.textContent = "✕";
+      del.onclick = () => {
+        const rid = show.id; shows.splice(idx, 1); saveAll();
+        if (rid === state.activeShowId) pickRandomShow(); else render();
       };
-
-      actions.append(selectBtn, delBtn);
+      actions.append(sel, del);
       item.append(info, actions);
       listEl.appendChild(item);
     });
   }
 
-  // Mark show as "In Progress" as soon as you click Open in SoundCloud
-  document.getElementById("launchBtn").onclick = () => {
-    if (state.activeShowId) {
-      state.inProgress = true;
-      saveAll();
-      render();
-    }
-  };
-
-  // Mark current show finished and roll the next unplayed show
-  document.getElementById("finishBtn").onclick = () => {
-    if (state.activeShowId && !state.completedIds.includes(state.activeShowId)) {
-      state.completedIds.push(state.activeShowId);
-    }
-    pickRandomShow(state.activeShowId);
-  };
-
-  // Skip to a different show without marking the current one finished
-  document.getElementById("rerollBtn").onclick = () => {
-    pickRandomShow(state.activeShowId);
-  };
-
   document.getElementById("addBtn").onclick = () => {
     const name = document.getElementById("newName").value.trim();
-    const url = document.getElementById("newUrl").value.trim();
-    if (!name || !url) return;
-    shows.push({ id: "custom_" + Date.now(), name, url, enabled: true });
-    saveAll();
-    render();
+    const rawUrl = document.getElementById("newUrl").value.trim();
+    if (!name || !rawUrl) return;
+    const slug = rawUrl.replace(/^https?:\/\/(www\.|m\.)?soundcloud\.com\//i, "").split("?").replace(/^\/+|\/+$/g, "");
+    shows.push({ id: "custom_" + Date.now(), name, slug, url: rawUrl, enabled: true, lastNote: "" });
+    saveAll(); render();
     document.getElementById("newName").value = "";
     document.getElementById("newUrl").value = "";
   };
 
   document.getElementById("resetBtn").onclick = () => {
     shows = JSON.parse(JSON.stringify(DEFAULT_SHOWS));
-    state = { activeShowId: null, inProgress: false, completedIds: [] };
-    saveAll();
-    pickRandomShow();
+    state = { activeShowId: null, inProgress: false, cycleCompletedIds: [], everHeardIds: [], pinnedEpisodeUrl: "" };
+    saveAll(); pickRandomShow();
   };
 
-  if (!state.activeShowId) pickRandomShow();
-  else render();
+  if (!state.activeShowId) pickRandomShow(); else render();
 </script>
 </body>
 </html>
