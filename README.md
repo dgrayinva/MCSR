@@ -2,7 +2,7 @@
 
 A lightweight, single-page web app hosted on GitHub Pages that randomly rotates through my favorite house music radio shows on SoundCloud without repeating a show until the full rotation cycle is complete.
 
-**Live App:** [https://github.io](https://github.io)
+**Live App:** https://dgrayinva.github.io/MCSR/
 
 ## Features
 
@@ -30,7 +30,7 @@ A lightweight, single-page web app hosted on GitHub Pages that randomly rotates 
 
 ## Recommended Mobile Setup
 
-1. Open [https://github.io](https://github.io) in your mobile browser (avoid Private/Incognito tabs so `localStorage` persists).
+1. Open https://dgrayinva.github.io/MCSR/ in your mobile browser (avoid Private/Incognito tabs so `localStorage` persists).
 2. Add the page to your phone's **Home Screen** for quick one-tap access before driving or listening.
 3. *(Optional)* In the SoundCloud mobile app, go to **Settings → Basic Settings** and turn **Autoplay related tracks** off so playback stops cleanly at the end of a radio show.
 
